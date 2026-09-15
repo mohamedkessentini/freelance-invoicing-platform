@@ -1,0 +1,108 @@
+# GitLab CI/CD pipeline for freelance-invoicing-platform (MERN)
+#
+# Stages: build -> test -> package(docker-build) -> docker-push (manual) -> deploy (manual).
+# docker-push/deploy are manual since they need registry/cluster credentials not available on
+# GitLab.com's free shared runners by default - see README's CI/CD section.
+
+stages:
+  - build
+  - test
+  - docker-build
+  - docker-push
+
+variables:
+  MONGO_INITDB_DATABASE: freelance_invoicing_test
+
+.server_cache:
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-server-npm"
+    paths:
+      - server/node_modules
+
+.client_cache:
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-client-npm"
+    paths:
+      - client/node_modules
+
+server-build:
+  stage: build
+  image: node:20-alpine
+  extends: .server_cache
+  script:
+    - cd server
+    - npm ci
+    - npm run typecheck
+
+client-build:
+  stage: build
+  image: node:20-alpine
+  extends: .client_cache
+  script:
+    - cd client
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - client/dist
+    expire_in: 1 hour
+
+server-lint:
+  stage: test
+  image: node:20-alpine
+  extends: .server_cache
+  script:
+    - cd server
+    - npm ci
+    - npm run lint
+
+server-test:
+  stage: test
+  image: node:20-alpine
+  extends: .server_cache
+  script:
+    - cd server
+    - npm ci
+    - npm test
+  artifacts:
+    when: always
+    reports:
+      junit: server/junit.xml
+    expire_in: 1 week
+
+docker-build-server:
+  stage: docker-build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/server:$CI_COMMIT_SHORT_SHA ./server
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+docker-build-client:
+  stage: docker-build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/client:$CI_COMMIT_SHORT_SHA ./client
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+docker-push:
+  stage: docker-push
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build -t $CI_REGISTRY_IMAGE/server:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE/server:latest ./server
+    - docker build -t $CI_REGISTRY_IMAGE/client:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE/client:latest ./client
+    - docker push $CI_REGISTRY_IMAGE/server:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE/server:latest
+    - docker push $CI_REGISTRY_IMAGE/client:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE/client:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
