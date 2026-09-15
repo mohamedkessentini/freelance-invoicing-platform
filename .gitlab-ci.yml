@@ -56,6 +56,15 @@ server-lint:
     - npm ci
     - npm run lint
 
+client-lint:
+  stage: test
+  image: node:20-alpine
+  extends: .client_cache
+  script:
+    - cd client
+    - npm ci
+    - npm run lint
+
 server-test:
   stage: test
   image: node:20-alpine

@@ -189,6 +189,7 @@ npm run typecheck
 
 cd ../client
 npm run build          # tsc -b && vite build - fails the build on type errors
+npm run lint            # oxlint
 ```
 
 ## CI/CD
