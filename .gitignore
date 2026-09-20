@@ -17,3 +17,7 @@ Thumbs.db
 
 coverage/
 junit.xml
+
+# Local-only notes
+CV_DESCRIPTION.md
+INTERVIEW_PREPARATION.md
